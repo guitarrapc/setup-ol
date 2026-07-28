@@ -1,0 +1,10 @@
+node_modules/
+logs
+*.log
+.npm
+.env
+.env.*
+coverage/
+.nyc_output/
+*.tgz
+.references/

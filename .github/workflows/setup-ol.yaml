@@ -1,0 +1,87 @@
+name: setup ol
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  with-latest:
+    strategy:
+      fail-fast: false
+      matrix:
+        os:
+          - ubuntu-24.04
+          - macos-15
+          - windows-2025
+          - ubuntu-24.04-arm
+          - macos-26-intel
+    timeout-minutes: 10
+    runs-on: ${{ matrix.os }}
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+        with:
+          persist-credentials: false
+      # seiton: disable-next-line unpinned-uses
+      - uses: ./
+      - run: ol --version
+
+  with-version:
+    strategy:
+      fail-fast: false
+      matrix:
+        os:
+          - ubuntu-24.04
+          - macos-15
+          - windows-2025
+          - ubuntu-24.04-arm
+          - macos-26-intel
+    timeout-minutes: 10
+    runs-on: ${{ matrix.os }}
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+        with:
+          persist-credentials: false
+      # seiton: disable-next-line unpinned-uses
+      - uses: ./
+        with:
+          ol-version: "0.1.0"
+      - run: |
+          node -e "const {execSync}=require('node:child_process'); const v=execSync('ol --version',{encoding:'utf8'}).trim(); if(!/^v?0\.1\.0(?:\.0)?$/.test(v)){ throw new Error('Unexpected version: '+v); }"
+
+  with-version-v-prefix:
+    strategy:
+      fail-fast: false
+      matrix:
+        os:
+          - ubuntu-24.04
+          - macos-15
+          - windows-2025
+          - ubuntu-24.04-arm
+          - macos-26-intel
+    timeout-minutes: 10
+    runs-on: ${{ matrix.os }}
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+        with:
+          persist-credentials: false
+      # seiton: disable-next-line unpinned-uses
+      - uses: ./
+        with:
+          ol-version: "v0.1.0"
+      - run: |
+          node -e "const {execSync}=require('node:child_process'); const v=execSync('ol --version',{encoding:'utf8'}).trim(); if(!/^v?0\.1\.0(?:\.0)?$/.test(v)){ throw new Error('Unexpected version: '+v); }"
+
+  setup-complete:
+    needs: [with-latest, with-version, with-version-v-prefix]
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    permissions: {}
+    steps:
+      - run: echo "Setup complete"
