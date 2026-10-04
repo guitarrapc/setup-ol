@@ -1,0 +1,60 @@
+name: "Check Licenses with Ol"
+description: "Installs ol, scans resolved dependency inputs, and checks them against an SPDX license allow-list."
+author: "guitarrapc"
+inputs:
+  allow-licenses:
+    description: "Comma-separated SPDX License Identifiers allowed by the policy."
+    required: true
+  allow-dev-licenses:
+    description: "Comma-separated SPDX License Identifiers additionally allowed for proven development-only dependencies."
+    required: false
+    default: ""
+  input:
+    description: "Newline-separated files or directories passed to ol scan --input, relative to working-directory."
+    required: false
+    default: "."
+  exclude-input-paths:
+    description: "Newline-separated files or directories excluded from ol input discovery, relative to working-directory."
+    required: false
+    default: ""
+  baselines:
+    description: "Newline-separated ol baseline files, relative to working-directory. Each file must exist."
+    required: false
+    default: ""
+  seed-cache:
+    description: "Optional .olcache archive unpacked before scanning, relative to working-directory. A missing archive is skipped."
+    required: false
+    default: ""
+  cache:
+    description: "Persist the ol evidence cache between workflow runs with the GitHub Actions cache."
+    required: false
+    default: "true"
+  working-directory:
+    description: "Directory ol runs in. Relative to the workspace."
+    required: false
+    default: "."
+  ol-version:
+    description: "The version of ol to install. Use latest to install the latest release."
+    required: false
+    default: "latest"
+  github-token:
+    description: "Token used for GitHub Releases API requests and ol evidence collection (OL_GITHUB_TOKEN)."
+    required: false
+    default: ${{ github.token }}
+outputs:
+  result:
+    description: "passed, violations, inconclusive, or failed."
+  report-path:
+    description: "Path of the canonical JSON scan report."
+  sarif-path:
+    description: "Path of the SARIF file written by ol check."
+  ol-version:
+    description: "Installed ol version."
+  ol-path:
+    description: "Directory path added to PATH that contains the ol binary."
+runs:
+  using: "node24"
+  main: "../dist/check.js"
+branding:
+  icon: "check-circle"
+  color: "green"
