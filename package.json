@@ -1,6 +1,6 @@
 {
   "name": "setup-ol",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "private": true,
   "type": "module",
   "description": "Setup ol CLI for GitHub Actions",
@@ -21,12 +21,14 @@
   "keywords": [],
   "author": "guitarrapc",
   "dependencies": {
+    "@actions/cache": "6.2.0",
     "@actions/core": "3.0.1",
     "@actions/io": "3.0.2",
     "@actions/tool-cache": "4.0.0"
   },
   "devDependencies": {
     "@rollup/plugin-commonjs": "29.0.0",
+    "@rollup/plugin-json": "6.1.0",
     "@rollup/plugin-node-resolve": "16.0.3",
     "rollup": "4.62.0"
   }
