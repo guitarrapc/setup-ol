@@ -84631,16 +84631,22 @@ function buildCheckArgs({ reportPath, allowLicenses, allowDevLicenses, baselines
     return args;
 }
 
-// The key is unique per run so every run saves the evidence it collected; restores take the newest entry by prefix.
-function buildCacheKeys(env, platform) {
+// The key is unique per invocation so every invocation saves the evidence it collected; restores take the newest
+// entry by prefix. Matrix legs share run, attempt, job, and often platform, so a random suffix keeps their keys apart.
+function buildCacheKeys(env, platform, uniqueId) {
     const restorePrefix = `${CACHE_KEY_PREFIX}-${platform}-`;
     const runId = env.GITHUB_RUN_ID || 'local';
     const runAttempt = env.GITHUB_RUN_ATTEMPT || '1';
     const job = env.GITHUB_JOB || 'job';
     return {
-        primaryKey: `${restorePrefix}${runId}-${runAttempt}-${job}`,
+        primaryKey: `${restorePrefix}${runId}-${runAttempt}-${job}-${uniqueId}`,
         restoreKeys: [restorePrefix]
     };
+}
+
+// GITHUB_ACTION identifies the step within a job, so each invocation keeps its own report and SARIF files.
+function resolveInvocationDirName(env) {
+    return (env.GITHUB_ACTION || 'local').replace(/[^A-Za-z0-9._-]/g, '_');
 }
 
 // Runs one process. stdout goes to stdoutPath when given, otherwise it is captured; stderr streams to the log.
@@ -84726,7 +84732,8 @@ async function runCheckOl(deps) {
         installOl,
         runFn = runProcess,
         env = process.env,
-        platform = process.platform
+        platform = process.platform,
+        uniqueId = crypto$1.randomUUID()
     } = deps;
 
     const allowLicenses = core.getInput('allow-licenses', { required: true });
@@ -84745,11 +84752,14 @@ async function runCheckOl(deps) {
     const { extractedDir } = await installOl();
     const olPath = path$1.join(extractedDir, platform === 'win32' ? 'ol.exe' : 'ol');
 
+    // The evidence cache is shared by every invocation in the job; reports belong to one invocation.
     const workDir = path$1.join(env.RUNNER_TEMP || os$1.tmpdir(), 'ol-check');
     const cacheDir = path$1.join(workDir, 'cache');
-    const reportPath = path$1.join(workDir, 'ol-report.json');
-    const sarifPath = path$1.join(workDir, 'ol.sarif');
+    const outputDir = path$1.join(workDir, 'outputs', resolveInvocationDirName(env));
+    const reportPath = path$1.join(outputDir, 'ol-report.json');
+    const sarifPath = path$1.join(outputDir, 'ol.sarif');
     await fsp.mkdir(cacheDir, { recursive: true });
+    await fsp.mkdir(outputDir, { recursive: true });
 
     const processOptions = { cwd: workingDirectory, env: { ...env, OL_GITHUB_TOKEN: token } };
 
@@ -84757,7 +84767,7 @@ async function runCheckOl(deps) {
         await unpackSeedCache(core, olPath, path$1.resolve(workingDirectory, seedCache), cacheDir, runFn, processOptions);
     }
 
-    const cacheKeys = buildCacheKeys(env, platform);
+    const cacheKeys = buildCacheKeys(env, platform, uniqueId);
     const cacheEnabled = useCache && cache.isFeatureAvailable();
     if (cacheEnabled) {
         await restoreEvidenceCache(core, cache, cacheDir, cacheKeys);

@@ -9,6 +9,7 @@ import {
     buildScanArgs,
     buildCheckArgs,
     buildCacheKeys,
+    resolveInvocationDirName,
     runProcess,
     runCheckOl
 } from '../lib/check-ol.js';
@@ -98,9 +99,11 @@ async function createEnv() {
             GITHUB_RUN_ID: '42',
             GITHUB_RUN_ATTEMPT: '2',
             GITHUB_JOB: 'license-check',
+            GITHUB_ACTION: 'check',
             GITHUB_STEP_SUMMARY: path.join(root, 'summary.md')
         },
-        workDir: path.join(runnerTemp, 'ol-check')
+        workDir: path.join(runnerTemp, 'ol-check'),
+        outputDir: path.join(runnerTemp, 'ol-check', 'outputs', 'check')
     };
 }
 
@@ -132,15 +135,63 @@ test('buildCheckArgs adds optional dev licenses and baselines only when supplied
     );
 });
 
-test('buildCacheKeys makes a per-run key restorable by platform prefix', () => {
-    const keys = buildCacheKeys({ GITHUB_RUN_ID: '42', GITHUB_RUN_ATTEMPT: '2', GITHUB_JOB: 'license-check' }, 'linux');
-    assert.equal(keys.primaryKey, 'ol-evidence-linux-42-2-license-check');
+test('buildCacheKeys makes a per-invocation key restorable by platform prefix', () => {
+    const keys = buildCacheKeys({ GITHUB_RUN_ID: '42', GITHUB_RUN_ATTEMPT: '2', GITHUB_JOB: 'license-check' }, 'linux', 'id');
+    assert.equal(keys.primaryKey, 'ol-evidence-linux-42-2-license-check-id');
     assert.deepEqual(keys.restoreKeys, ['ol-evidence-linux-']);
     assert.ok(keys.primaryKey.startsWith(keys.restoreKeys[0]));
 });
 
+test('buildCacheKeys separates matrix legs that share run, job, and platform', () => {
+    const env = { GITHUB_RUN_ID: '42', GITHUB_RUN_ATTEMPT: '1', GITHUB_JOB: 'license-check' };
+    const first = buildCacheKeys(env, 'linux', 'leg-a');
+    const second = buildCacheKeys(env, 'linux', 'leg-b');
+    assert.notEqual(first.primaryKey, second.primaryKey);
+    assert.deepEqual(first.restoreKeys, second.restoreKeys);
+});
+
+test('resolveInvocationDirName uses the step identifier as a safe directory name', () => {
+    assert.equal(resolveInvocationDirName({ GITHUB_ACTION: 'check' }), 'check');
+    assert.equal(resolveInvocationDirName({ GITHUB_ACTION: '__guitarrapc_setup-ol_2' }), '__guitarrapc_setup-ol_2');
+    assert.equal(resolveInvocationDirName({ GITHUB_ACTION: 'a/b\\c:d' }), 'a_b_c_d');
+    assert.equal(resolveInvocationDirName({}), 'local');
+});
+
+test('runCheckOl keeps reports apart for invocations in one job while sharing the evidence cache', async () => {
+    const { env, workDir } = await createEnv();
+    const results = [];
+    for (const step of ['first', 'second']) {
+        const { core, calls: coreCalls } = createCore({ 'allow-licenses': 'MIT' });
+        const { cache } = createCache();
+        const { runFn, calls } = createRunFn();
+        await runCheckOl({ core, cache, installOl, runFn, env: { ...env, GITHUB_ACTION: step }, platform: 'linux' });
+        results.push({ outputs: coreCalls.outputs, cacheDir: calls[0].args[calls[0].args.indexOf('--cache-dir') + 1] });
+    }
+
+    assert.notEqual(results[0].outputs['report-path'], results[1].outputs['report-path']);
+    assert.notEqual(results[0].outputs['sarif-path'], results[1].outputs['sarif-path']);
+    assert.equal(results[0].outputs['report-path'], path.join(workDir, 'outputs', 'first', 'ol-report.json'));
+    assert.equal(results[0].cacheDir, path.join(workDir, 'cache'));
+    assert.equal(results[1].cacheDir, path.join(workDir, 'cache'));
+});
+
+test('runCheckOl saves under a different key on every invocation', async () => {
+    const { env } = await createEnv();
+    const keys = [];
+    for (let i = 0; i < 2; i++) {
+        const { core } = createCore({ 'allow-licenses': 'MIT' });
+        const { cache, calls: cacheCalls } = createCache();
+        const { runFn } = createRunFn();
+        await runCheckOl({ core, cache, installOl, runFn, env, platform: 'linux' });
+        keys.push(cacheCalls.save[0].key);
+    }
+
+    assert.notEqual(keys[0], keys[1]);
+    assert.ok(keys.every((x) => x.startsWith('ol-evidence-linux-42-2-license-check-')));
+});
+
 test('runCheckOl scans and checks in the working directory and writes outputs', async () => {
-    const { workspace, env, workDir } = await createEnv();
+    const { workspace, env, workDir, outputDir } = await createEnv();
     const { core, calls: coreCalls } = createCore({
         'allow-licenses': 'MIT,Apache-2.0',
         'allow-dev-licenses': 'GPL-3.0-only',
@@ -153,7 +204,7 @@ test('runCheckOl scans and checks in the working directory and writes outputs', 
     const { cache, calls: cacheCalls } = createCache();
     const { runFn, calls } = createRunFn({}, cacheCalls);
 
-    const result = await runCheckOl({ core, cache, installOl, runFn, env, platform: 'linux' });
+    const result = await runCheckOl({ core, cache, installOl, runFn, env, platform: 'linux', uniqueId: 'id' });
 
     assert.equal(result.result, 'passed');
     assert.deepEqual(calls.map((x) => x.args[0]), ['scan', 'check']);
@@ -161,20 +212,20 @@ test('runCheckOl scans and checks in the working directory and writes outputs', 
     assert.ok(calls.every((x) => x.options.cwd === path.join(workspace, 'repo')));
     assert.ok(calls.every((x) => x.options.env.OL_GITHUB_TOKEN === 'token-value'));
     assert.deepEqual(calls[0].args, buildScanArgs({ inputs: ['.'], excludeInputPaths: ['tools/'], cacheDir: path.join(workDir, 'cache') }));
-    assert.equal(calls[0].options.stdoutPath, path.join(workDir, 'ol-report.json'));
+    assert.equal(calls[0].options.stdoutPath, path.join(outputDir, 'ol-report.json'));
     assert.deepEqual(calls[1].args, buildCheckArgs({
-        reportPath: path.join(workDir, 'ol-report.json'),
+        reportPath: path.join(outputDir, 'ol-report.json'),
         allowLicenses: 'MIT,Apache-2.0',
         allowDevLicenses: 'GPL-3.0-only',
         baselines: ['ol-baseline.json', '../shared/ol-baseline.json'],
-        sarifPath: path.join(workDir, 'ol.sarif')
+        sarifPath: path.join(outputDir, 'ol.sarif')
     }));
     assert.deepEqual(cacheCalls.order, ['restore', 'scan', 'save', 'check']);
-    assert.equal(cacheCalls.save[0].key, 'ol-evidence-linux-42-2-license-check');
+    assert.equal(cacheCalls.save[0].key, 'ol-evidence-linux-42-2-license-check-id');
     assert.deepEqual(coreCalls.summary, ['## ol license check']);
     assert.equal(coreCalls.outputs.result, 'passed');
-    assert.equal(coreCalls.outputs['report-path'], path.join(workDir, 'ol-report.json'));
-    assert.equal(coreCalls.outputs['sarif-path'], path.join(workDir, 'ol.sarif'));
+    assert.equal(coreCalls.outputs['report-path'], path.join(outputDir, 'ol-report.json'));
+    assert.equal(coreCalls.outputs['sarif-path'], path.join(outputDir, 'ol.sarif'));
     await fs.access(path.join(workDir, 'cache'));
 });
 
