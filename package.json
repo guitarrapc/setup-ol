@@ -21,7 +21,7 @@
   "keywords": [],
   "author": "guitarrapc",
   "dependencies": {
-    "@actions/cache": "6.2.0",
+    "@actions/cache": "6.3.0",
     "@actions/core": "3.0.1",
     "@actions/io": "3.0.2",
     "@actions/tool-cache": "4.0.0"
