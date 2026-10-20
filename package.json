@@ -21,7 +21,7 @@
   "keywords": [],
   "author": "guitarrapc",
   "dependencies": {
-    "@actions/cache": "6.2.0",
+    "@actions/cache": "6.3.0",
     "@actions/core": "3.0.1",
     "@actions/io": "3.0.2",
     "@actions/tool-cache": "4.0.0"
@@ -30,6 +30,6 @@
     "@rollup/plugin-commonjs": "29.0.0",
     "@rollup/plugin-json": "6.1.0",
     "@rollup/plugin-node-resolve": "16.0.3",
-    "rollup": "4.63.4"
+    "rollup": "4.64.0"
   }
 }
