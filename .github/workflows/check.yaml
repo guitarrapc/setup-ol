@@ -31,7 +31,7 @@ jobs:
       - uses: ./check
         id: check
         with:
-          allow-licenses: "MIT,ISC,Apache-2.0,BSD-2-Clause,BSD-3-Clause,0BSD"
+          allow-licenses: "0BSD,Apache-2.0,BSD-3-Clause,BlueOak-1.0.0,ISC,MIT"
           seed-cache: missing.olcache
       - name: Test action output
         shell: bash
